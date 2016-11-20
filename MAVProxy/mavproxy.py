@@ -126,6 +126,7 @@ class MPState(object):
               MPSetting('streamrate', int, 4, 'Stream rate link1', range=(-1,100), increment=1),
               MPSetting('streamrate2', int, 4, 'Stream rate link2', range=(-1,100), increment=1),
               MPSetting('heartbeat', int, 1, 'Heartbeat rate', range=(0,5), increment=1),
+              MPSetting('sitl_speedup', float, 1.0, 'SITL speedup'),
               MPSetting('mavfwd', bool, True, 'Allow forwarded control'),
               MPSetting('mavfwd_rate', bool, False, 'Allow forwarded rate control'),
               MPSetting('shownoise', bool, True, 'Show non-MAVLink data'),
@@ -712,12 +713,14 @@ def periodic_tasks():
         return
 
     if mpstate.settings.heartbeat != 0:
-        heartbeat_period.frequency = mpstate.settings.heartbeat
+        heartbeat_period.frequency = mpstate.settings.heartbeat * mpstate.settings.sitl_speedup
 
     if heartbeat_period.trigger() and mpstate.settings.heartbeat != 0:
         mpstate.status.counters['MasterOut'] += 1
         for master in mpstate.mav_master:
             send_heartbeat(master)
+
+    heartbeat_check_period.frequency = 0.33 * mpstate.settings.sitl_speedup
 
     if heartbeat_check_period.trigger():
         check_link_status()
@@ -875,6 +878,8 @@ if __name__ == '__main__':
     parser.add_option("--baudrate", dest="baudrate", type='int',
                       help="default serial baud rate", default=57600)
     parser.add_option("--sitl", dest="sitl",  default=None, help="SITL output port")
+    parser.add_option("--sitl-speedup", dest="sitl_speedup", type='float', default=1.0,
+                      help="Increase heartbeat at same scale as SITL")
     parser.add_option("--streamrate",dest="streamrate", default=4, type='int',
                       help="MAVLink stream rate")
     parser.add_option("--source-system", dest='SOURCE_SYSTEM', type='int',
@@ -1020,6 +1025,8 @@ if __name__ == '__main__':
     if opts.sitl:
         mpstate.sitl_output = mavutil.mavudp(opts.sitl, input=False)
 
+    mpstate.settings.sitl_speedup = opts.sitl_speedup
+
     mpstate.settings.streamrate = opts.streamrate
     mpstate.settings.streamrate2 = opts.streamrate
 
@@ -1027,8 +1034,8 @@ if __name__ == '__main__':
         mpstate.settings.state_basedir = opts.state_basedir
 
     msg_period = mavutil.periodic_event(1.0/15)
-    heartbeat_period = mavutil.periodic_event(1)
-    heartbeat_check_period = mavutil.periodic_event(0.33)
+    heartbeat_period = mavutil.periodic_event(1 * mpstate.settings.sitl_speedup)
+    heartbeat_check_period = mavutil.periodic_event(0.33 * mpstate.settings.sitl_speedup)
 
     mpstate.input_queue = Queue.Queue()
     mpstate.input_count = 0
