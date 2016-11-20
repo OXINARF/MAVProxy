@@ -21,7 +21,7 @@ class ParamState:
         self.parm_file = parm_file
         self.fetch_set = None
 
-    def handle_mavlink_packet(self, master, m):
+    def handle_mavlink_packet(self, master, mpstate, m):
         '''handle an incoming mavlink packet'''
         if m.get_type() == 'PARAM_VALUE':
             param_id = "%.16s" % m.param_id
@@ -38,6 +38,8 @@ class ParamState:
             if m.param_count != -1:
                 self.mav_param_count = m.param_count
             self.mav_param[str(param_id)] = m.param_value
+            if mpstate.sitl_output and param_id == 'SIM_SPEEDUP' and m.param_value != -1:
+                mpstate.settings.sitl_speedup = m.param_value
             if self.fetch_one > 0:
                 self.fetch_one -= 1
                 print("%s = %f" % (param_id, m.param_value))
@@ -281,7 +283,7 @@ class ParamModule(mp_module.MPModule):
 
     def mavlink_packet(self, m):
         '''handle an incoming mavlink packet'''
-        self.pstate.handle_mavlink_packet(self.master, m)
+        self.pstate.handle_mavlink_packet(self.master, self.mpstate, m)
 
     def idle_task(self):
         '''handle missing parameters'''
